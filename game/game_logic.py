@@ -593,22 +593,19 @@ class GameInterface:
         return info_purchased
     
     def _get_location_choice(self) -> str:
-        """Get location choice from user, showing local event and last year's multiplier"""
+        """Get location choice from user by number, showing local event and last year's multiplier"""
         print(f"\n--- LOCATIONS ---")
-        # Get today's and last year's event multipliers from simulator
         todays_events = getattr(self.sim, 'todays_event_multipliers', {})
         last_year_events = getattr(self.sim, 'last_year_event_multipliers', {})
-        for loc, data in LOCATIONS.items():
+        location_keys = list(LOCATIONS.keys())
+        for idx, loc in enumerate(location_keys, 1):
+            data = LOCATIONS[loc]
             comp = COMPETITION_STATS.get(loc, {})
-            # Get today's event and multiplier
             event_today = todays_events.get(loc, {}).get('event', None)
-            today_multiplier = todays_events.get(loc, {}).get('multiplier', 1.0)
-            # Get last year's event and multiplier
-            last_year_event = last_year_events.get(loc, {}).get('event', None)
             last_year_multiplier = last_year_events.get(loc, {}).get('multiplier', 1.0)
             local_events_str = event_today if event_today else 'None'
             competitor_price = comp.get('avg_price', None)
-            print(f"{loc.title()}:")
+            print(f"[{idx}] {loc.title()}:")
             print(f"    Local Events: {local_events_str}")
             print(f"    Last year's multiplier: {last_year_multiplier:.2f}")
             print(f"    Last years traffic: {data['base_traffic']}")
@@ -616,27 +613,31 @@ class GameInterface:
             if competitor_price is not None:
                 print(f"    Lowest Competitor Price: ${competitor_price:.2f} per cup")
         while True:
-            raw_location = input("Choose location: ").strip()
-            location = raw_location.lower()
-            if location in LOCATIONS:
-                return location
-            print(f"Invalid location! Choose from: {', '.join(LOCATIONS.keys())}")
-    
+            raw_location = input(f"Choose location [1-{len(location_keys)}]: ").strip()
+            if raw_location.isdigit():
+                idx = int(raw_location)
+                if 1 <= idx <= len(location_keys):
+                    return location_keys[idx-1]
+            print(f"Invalid selection! Enter a number between 1 and {len(location_keys)}.")
+
     def _get_recipe_choice(self, available_money: float) -> str:
-        """Get recipe choice from user, showing max cups for each recipe based on available money"""
+        """Get recipe choice from user by number, sorted by cost, showing max cups for each recipe based on available money"""
         print(f"\n--- RECIPES ---")
-        for recipe_name, recipe_data in RECIPES.items():
+        # Sort recipes by cost (lowest to highest)
+        sorted_recipes = sorted(RECIPES.items(), key=lambda x: x[1]['cost'])
+        for idx, (recipe_name, recipe_data) in enumerate(sorted_recipes, 1):
             max_cups = int(available_money / recipe_data['cost']) if recipe_data['cost'] > 0 else 0
-            print(f"{recipe_name.title()}: ${recipe_data['cost']:.2f}/cup, "
+            print(f"[{idx}] {recipe_name.title()}: ${recipe_data['cost']:.2f}/cup, "
                   f"Quality: {recipe_data['base_quality']}, "
                   f"Appeal: {recipe_data['appeal']}, "
                   f"Max cups: {max_cups}")
         while True:
-            raw_recipe = input("Choose recipe: ").strip()
-            recipe = raw_recipe.lower()
-            if recipe in RECIPES:
-                return recipe
-            print(f"Invalid recipe! Choose from: {', '.join(RECIPES.keys())}")
+            raw_recipe = input(f"Choose recipe [1-{len(sorted_recipes)}]: ").strip()
+            if raw_recipe.isdigit():
+                idx = int(raw_recipe)
+                if 1 <= idx <= len(sorted_recipes):
+                    return sorted_recipes[idx-1][0]
+            print(f"Invalid selection! Enter a number between 1 and {len(sorted_recipes)}.")
     
     def _get_price_choice(self) -> float:
         """Get price choice from user"""
