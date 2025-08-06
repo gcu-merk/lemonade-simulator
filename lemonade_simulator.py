@@ -1,3 +1,15 @@
+# ── LemonadeSimulator Main Interface ─────────────────────────────────────────
+class LemonadeSimulator:
+    """Main interface for running the Lemonade Stand simulation."""
+    def __init__(self):
+        self.network = BayesianNetwork()
+        # Add additional initialization as needed
+
+    def run(self):
+        # Placeholder for main simulation loop or logic
+        print("Lemonade Stand Simulation started.")
+        # Example: print available nodes
+        print("Bayesian Network nodes:", list(self.network.nodes.keys()))
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -129,5 +141,9 @@ class BayesianNetwork:
 
         # 4. Demand Node (depends on traffic, price, quality, competition)
         # Simplified demand model
+        # TODO: Replace demand_cpt with the actual conditional probability table for demand
+        demand_cpt = {}  # Placeholder, fill with actual CPT
         self.nodes['demand'] = BayesianNode('demand',
-                                          ['very_low', 'low', 'medium', 'high', 'very_high'],
+                                           ['very_low', 'low', 'medium', 'high', 'very_high'],
+                                           ['traffic', 'price', 'quality', 'competition'],
+                                           demand_cpt)
