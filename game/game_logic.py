@@ -560,40 +560,40 @@ class GameInterface:
         return location, recipe, price, quantity, info_purchased
     
     def _handle_info_purchases(self, player_state: PlayerState) -> List[str]:
-        """Handle information purchase interface"""
+        """Handle information purchase interface with input validation"""
         info_purchased = []
         current_money = player_state.money
-        
         print(f"\n--- INFORMATION MARKET ---")
         for info_type, info_data in INFO_MARKET.items():
             cost = info_data['cost']
             desc = info_data['description']
             status = "✓" if current_money >= cost else "✗"
             print(f"{status} {info_type}: ${cost:.2f} - {desc}")
-        
         while True:
             raw_choice = input("\nBuy information? (type name or 'done'): ").strip()
+            if not raw_choice:
+                print("Input cannot be empty. Please enter a valid info name or 'done'.")
+                continue
             choice = raw_choice.lower()
             if choice == 'done':
                 break
             elif choice in INFO_MARKET:
                 cost = INFO_MARKET[choice]['cost']
-                if current_money >= cost and choice not in info_purchased:
+                if choice in info_purchased:
+                    print("Already purchased!")
+                elif current_money >= cost:
                     info_purchased.append(choice)
                     current_money -= cost
                     print(f"✓ Purchased {choice} for ${cost:.2f}")
                     print(f"Remaining money: ${current_money:.2f}")
-                elif choice in info_purchased:
-                    print("Already purchased!")
                 else:
                     print("Insufficient funds!")
             else:
                 print("Invalid choice. Available: " + ", ".join(INFO_MARKET.keys()))
-        
         return info_purchased
     
     def _get_location_choice(self) -> str:
-        """Get location choice from user by number, showing local event and last year's multiplier"""
+        """Get location choice from user by number, showing local event and last year's multiplier, with input validation"""
         print(f"\n--- LOCATIONS ---")
         todays_events = getattr(self.sim, 'todays_event_multipliers', {})
         last_year_events = getattr(self.sim, 'last_year_event_multipliers', {})
@@ -614,16 +614,21 @@ class GameInterface:
                 print(f"    Lowest Competitor Price: ${competitor_price:.2f} per cup")
         while True:
             raw_location = input(f"Choose location [1-{len(location_keys)}]: ").strip()
+            if not raw_location:
+                print("Input cannot be empty. Please enter a number.")
+                continue
             if raw_location.isdigit():
                 idx = int(raw_location)
                 if 1 <= idx <= len(location_keys):
                     return location_keys[idx-1]
-            print(f"Invalid selection! Enter a number between 1 and {len(location_keys)}.")
+                else:
+                    print(f"Invalid selection! Enter a number between 1 and {len(location_keys)}.")
+            else:
+                print(f"Invalid input! Please enter a number between 1 and {len(location_keys)}.")
 
     def _get_recipe_choice(self, available_money: float) -> str:
-        """Get recipe choice from user by number, sorted by cost, showing max cups for each recipe based on available money"""
+        """Get recipe choice from user by number, sorted by cost, showing max cups for each recipe based on available money, with input validation"""
         print(f"\n--- RECIPES ---")
-        # Sort recipes by cost (lowest to highest)
         sorted_recipes = sorted(RECIPES.items(), key=lambda x: x[1]['cost'])
         for idx, (recipe_name, recipe_data) in enumerate(sorted_recipes, 1):
             max_cups = int(available_money / recipe_data['cost']) if recipe_data['cost'] > 0 else 0
@@ -633,37 +638,54 @@ class GameInterface:
                   f"Max cups: {max_cups}")
         while True:
             raw_recipe = input(f"Choose recipe [1-{len(sorted_recipes)}]: ").strip()
+            if not raw_recipe:
+                print("Input cannot be empty. Please enter a number.")
+                continue
             if raw_recipe.isdigit():
                 idx = int(raw_recipe)
                 if 1 <= idx <= len(sorted_recipes):
                     return sorted_recipes[idx-1][0]
-            print(f"Invalid selection! Enter a number between 1 and {len(sorted_recipes)}.")
+                else:
+                    print(f"Invalid selection! Enter a number between 1 and {len(sorted_recipes)}.")
+            else:
+                print(f"Invalid input! Please enter a number between 1 and {len(sorted_recipes)}.")
     
     def _get_price_choice(self) -> float:
-        """Get price choice from user"""
+        """Get price choice from user with input validation"""
         while True:
+            raw_price = input(f"Set price (${PRICE_MIN:.2f}-${PRICE_MAX:.2f}): $").strip()
+            if not raw_price:
+                print("Input cannot be empty. Please enter a price.")
+                continue
             try:
-                price = float(input(f"Set price (${PRICE_MIN:.2f}-${PRICE_MAX:.2f}): $"))
-                if PRICE_MIN <= price <= PRICE_MAX:
-                    return price
-                print(f"Price must be between ${PRICE_MIN:.2f} and ${PRICE_MAX:.2f}")
+                price = float(raw_price)
             except ValueError:
                 print("Invalid price! Enter a number.")
+                continue
+            if PRICE_MIN <= price <= PRICE_MAX:
+                return price
+            print(f"Price must be between ${PRICE_MIN:.2f} and ${PRICE_MAX:.2f}")
     
     def _get_quantity_choice(self, recipe: str, available_money: float) -> int:
-        """Get quantity choice from user"""
+        """Get quantity choice from user with input validation"""
         recipe_cost = RECIPES[recipe]['cost']
         max_quantity = int(available_money / recipe_cost)
         print(f"\nMax affordable quantity: {max_quantity} cups")
-        
+        if max_quantity < 1:
+            print("You cannot afford any cups of this recipe.")
+            return 0
         while True:
-            try:
-                quantity = int(input("How many cups to make? "))
-                if 1 <= quantity <= max_quantity:
-                    return quantity
-                print(f"Quantity must be between 1 and {max_quantity}")
-            except ValueError:
+            raw_quantity = input("How many cups to make? ").strip()
+            if not raw_quantity:
+                print("Input cannot be empty. Please enter a whole number.")
+                continue
+            if not raw_quantity.isdigit():
                 print("Invalid quantity! Enter a whole number.")
+                continue
+            quantity = int(raw_quantity)
+            if 1 <= quantity <= max_quantity:
+                return quantity
+            print(f"Quantity must be between 1 and {max_quantity}")
     
     def display_final_results(self):
         """Display final game results"""
