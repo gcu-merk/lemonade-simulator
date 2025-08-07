@@ -374,37 +374,46 @@ class GameSimulator:
         )
     
     def ai_make_decision(self, info_budget_ratio: float = 0.15) -> Tuple[str, str, float, int, List[str]]:
-        """AI makes optimal decision using MEU analysis (auto-buy all info)"""
+        """AI selects the optimal affordable decision maximizing expected profit (auto-buy all info)."""
         self.initialize_ai()
         ai_state = self.player_manager.get_player_state('ai')
-        # AI always purchases all available information
         info_purchased = list(INFO_MARKET.keys())
-        # Generate optimal decision using MEU analysis
-        best_decision = self.meu_analyzer.find_optimal_decision(
+        # Generate all possible decisions and filter for affordability
+        possible_decisions = self.meu_analyzer.generate_all_decisions(
             list(LOCATIONS.keys()),
             self.engine.weather_forecast,
             ai_state,
             info_purchased
         )
-        # Defensive: ensure location and recipe are strings, not lists
-        location = best_decision.location
-        recipe = best_decision.recipe
-        if isinstance(location, list):
-            location = location[0] if location else ''
-        if isinstance(recipe, list):
-            recipe = recipe[0] if recipe else ''
-        # Log AI decision process
+        # Filter only affordable decisions
+        affordable_decisions = [d for d in possible_decisions if self.player_manager.can_afford('ai', d.recipe, d.quantity, info_purchased)]
+        if affordable_decisions:
+            # Pick the one with the highest expected profit
+            best_decision = max(affordable_decisions, key=lambda d: getattr(d, 'expected_profit', 0))
+            location = best_decision.location
+            recipe = best_decision.recipe
+            price = getattr(best_decision, 'price', 1.0)
+            quantity = getattr(best_decision, 'quantity', 1)
+        else:
+            # Fallback: buy 1 cup of cheapest recipe
+            cheapest_recipe = min(RECIPES.keys(), key=lambda r: RECIPES[r]['cost'])
+            location = list(LOCATIONS.keys())[0]
+            recipe = cheapest_recipe
+            price = 1.0
+            quantity = 1
+            info_purchased = []
+            best_decision = None
         ai_state.decision_logs.append({
             'day': self.day,
             'decision': best_decision,
             'info_purchased': info_purchased,
-            'reasoning': getattr(best_decision, 'reasoning', None)
+            'reasoning': getattr(best_decision, 'reasoning', None) if best_decision else None
         })
         return (
             location,
             recipe,
-            best_decision.price,
-            best_decision.quantity,
+            price,
+            quantity,
             info_purchased
         )
     
@@ -471,18 +480,41 @@ class GameInterface:
     
     def __init__(self, simulator: GameSimulator):
         self.sim = simulator
+        self.header_displayed = False
+
+
+    def display_intro_and_get_days(self, starting_capital, starting_reputation, weather_forecast):
+        """Display the game header and prompt for number of days, then show intro info."""
+        print("\n🍋 LEMONADE STAND SIMULATOR 🍋\n")
+        print("Human vs AI with Bayesian MEU Analysis\n")
+        while True:
+            raw_days = input("How many days to simulate? (3-14): ").strip()
+            if not raw_days:
+                print("Input cannot be empty. Please enter a number between 3 and 14.")
+                continue
+            if not raw_days.isdigit():
+                print("Invalid input! Please enter a whole number between 3 and 14.")
+                continue
+            days = int(raw_days)
+            if 3 <= days <= 14:
+                break
+            print("Number of days must be between 3 and 14.")
+        self.display_intro(starting_capital, starting_reputation, weather_forecast, days)
+        return days
+
+    def display_intro(self, starting_capital, starting_reputation, weather_forecast, num_days):
+        """Display the intro information (without header or days prompt)."""
+        print(f"Starting Capital: ${starting_capital:.2f}")
+        print(f"Starting Reputation: {starting_reputation:.1f}/10")
+        self.header_displayed = True
     
     def display_game_state(self):
         """Display current game state"""
         state = self.sim.get_game_state()
-        
         print(f"\n{'='*60}")
         print(f"DAY {state['day']} - GAME STATUS")
         print(f"{'='*60}")
-        print(f"Weather Forecast: {state['weather_forecast'].title()}")
-        if state['current_weather']:
-            print(f"Actual Weather: {state['current_weather'].title()}")
-        
+        # Weather Forecast and Actual Weather display removed as requested
         for player_name, player_data in state['players'].items():
             print(f"\n{player_name.upper()}:")
             print(f"  Money: ${player_data['money']:.2f}")
@@ -492,40 +524,45 @@ class GameInterface:
                 print(f"  Total Sales: {player_data['total_sales']} glasses")
     
     def display_daily_results(self):
-        """Display results for the current day"""
+        """Display results for the current day, showing human first, then AI."""
         print(f"\n{'='*60}")
         print(f"DAY {self.sim.day} RESULTS")
         print(f"{'='*60}")
         print(f"Actual Weather: {self.sim.engine.current_weather.title()}")
-        
-        for player_name, player_state in self.sim.player_manager.players.items():
-            if (player_state.daily_logs and 
-                player_state.daily_logs[-1]['day'] == self.sim.day):
-                
-                log = player_state.daily_logs[-1]
-                # Defensive: ensure location and recipe are strings before .title()
-                location = log['location']
-                recipe = log['recipe']
-                if isinstance(location, list):
-                    location = location[0] if location else ''
-                if isinstance(recipe, list):
-                    recipe = recipe[0] if recipe else ''
-                print(f"\n{player_name.upper()}:")
-                print(f"  Location: {str(location).title()}")
-                print(f"  Recipe: {str(recipe).title()}")
-                print(f"  Price: ${log['price']:.2f}")
-                print(f"  Made: {log['quantity']} glasses")
-                print(f"  Sold: {log.get('glasses_sold', log.get('cups_sold', 0))} glasses")
-                print(f"  Waste: {log['waste']} glasses")
-                print(f"  Revenue: ${log['revenue']:.2f}")
-                print(f"  Profit: ${log['profit']:+.2f}")
-                print(f"  Quality: {log['quality']:.1f}/10")
-                print(f"  Customers: {log['customers']}")
-                print(f"  Reputation: {player_state.reputation:.1f}/10 "
-                      f"({log['reputation_change']:+.1f})")
-                
-                if log.get('info_purchased'):
-                    print(f"  Info Purchased: {', '.join(log['info_purchased'])}")
+        # Always show human first, then AI
+        for player_name in ['human', 'ai']:
+            player_state = self.sim.player_manager.players[player_name]
+            # Find the log for the current day, if any
+            log = None
+            if player_state.daily_logs:
+                for l in reversed(player_state.daily_logs):
+                    if l.get('day') == self.sim.day:
+                        log = l
+                        break
+            print(f"\n{player_name.upper()}:")
+            if not log:
+                # This should never happen for AI; raise for debug
+                raise RuntimeError(f"No results for {player_name} on day {self.sim.day}. This indicates a bug in the game loop.")
+            location = log['location']
+            recipe = log['recipe']
+            if isinstance(location, list):
+                location = location[0] if location else ''
+            if isinstance(recipe, list):
+                recipe = recipe[0] if recipe else ''
+            print(f"  Location: {str(location).title()}")
+            print(f"  Recipe: {str(recipe).title()}")
+            print(f"  Price: ${log['price']:.2f}")
+            print(f"  Made: {log['quantity']} glasses")
+            print(f"  Sold: {log.get('glasses_sold', log.get('cups_sold', 0))} glasses")
+            print(f"  Waste: {log['waste']} glasses")
+            print(f"  Revenue: ${log['revenue']:.2f}")
+            print(f"  Profit: ${log['profit']:+.2f}")
+            print(f"  Quality: {log['quality']:.1f}/10")
+            print(f"  Customer Contacts: {log['customers']}")
+            print(f"  Reputation: {player_state.reputation:.1f}/10 "
+                  f"({log['reputation_change']:+.1f})")
+            if log.get('info_purchased'):
+                print(f"  Info Purchased: {', '.join(log['info_purchased'])}")
     
     def get_human_decision(self) -> Tuple[str, str, float, int, List[str]]:
         """Get decision input from human player (auto-buy all info before any prompts)"""
