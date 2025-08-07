@@ -55,6 +55,25 @@ python main.py
 ## License
 MIT License
 
----
 
-*Created by gcu-merk*
+## Platform and Software Tools
+- **Platform:** Cross-platform (Windows, macOS, Linux; requires Python 3.8+)
+- **Programming Language:** Python 3.8 or higher
+- **Package Manager:** pip
+- **Version Control:** Git (GitHub repository)
+- **Editor/IDE:** Visual Studio Code (recommended) or any Python-compatible editor
+- **Testing:** Python’s built-in `unittest` (see `tests/` directory)
+- **Code Formatting:** PEP8 standard
+
+## AI Processing Details
+The AI opponent in the Lemonade Stand Simulator uses Maximum Expected Utility (MEU) analysis to make strategic decisions each day. This involves:
+
+- **Bayesian Network:** The AI leverages a Bayesian network (see `models/bayesian_network.py`) to estimate probabilities for uncertain factors such as weather, customer turnout, and event impact.
+- **Decision Variables:** For each simulated day, the AI considers possible actions (location, recipe, price, quantity) and uses the Bayesian network to predict likely outcomes.
+- **Utility Calculation:** The AI calculates the expected utility (profit, reputation, and risk of bankruptcy) for each action combination, factoring in both its own and the human player's possible choices.
+- **Action Selection:** The AI selects the action set with the highest expected utility, aiming to maximize profit and reputation while minimizing risk.
+- **Value of Perfect Information (VPI):** The AI can also evaluate the Value of Perfect Information, which measures how much having complete certainty about uncertain factors (like weather or events) would improve its expected utility. This helps the AI assess the benefit of additional information, even though in this simulation all information is auto-purchased for both players.
+
+This approach allows the AI to adapt to changing conditions and make rational, context-aware decisions, providing a challenging and realistic opponent for the player.
+
+The original requirement suggested implementing three kinds of actions (e.g., walk, run slowly, run fast). However, I chose to create a lemonade stand simulation instead, as it made more practical sense to me and allowed for a richer, more engaging business scenario. This approach better demonstrates AI decision-making and strategic planning in a real-world context.
