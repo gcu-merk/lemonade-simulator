@@ -33,6 +33,7 @@ Run the main script:
 python main.py
 ```
 
+
 ### Project Structure
 - `main.py` — Entry point for the game
 - `lemonade_simulator.py` — (Legacy/compatibility)
@@ -40,6 +41,52 @@ python main.py
 - `game/` — Core game logic, simulation, and AI
 - `models/` — Data classes and Bayesian network
 - `tests/` — Unit tests
+
+### Code Flowchart (High-Level)
+
+```
+┌────────────────────────────┐
+│        main.py            │
+└────────────┬──────────────┘
+             │
+             ▼
+   ┌──────────────────────────────┐
+   │   GameSimulator (game_logic) │
+   └────────────┬─────────────────┘
+                │
+   ┌────────────┴─────────────┐
+   │                          │
+   ▼                          ▼
+GameEngine              PlayerManager
+   │                          │
+   ▼                          ▼
+Weather, Customers,      PlayerState,
+Quality, Sales, etc.     Purchases, etc.
+   │                          │
+   └────────────┬─────────────┘
+                │
+                ▼
+        MEUAnalyzer (AI logic)
+                │
+                ▼
+        BayesianNetwork (models)
+                │
+                ▼
+         GameInterface (UI)
+                │
+                ▼
+           User/AI Input
+                │
+                ▼
+           Results Output
+```
+
+
+This flowchart shows the main modules and how data flows between them during a game turn.
+
+#### The Role of the Decision Network (Bayesian Network)
+
+The `BayesianNetwork` is the core of the AI's decision-making process. It models the uncertainties in the game—such as weather, customer behavior, and sales outcomes—using probabilistic reasoning. When the AI (via `MEUAnalyzer`) evaluates possible decisions, it uses the Bayesian network to estimate the probability of different outcomes for each choice. This allows the AI to calculate the Maximum Expected Utility (MEU) for every possible action, balancing risk and reward just like a real-world business would. The decision network is what enables the AI to make smart, adaptive choices based on incomplete information, simulating realistic business strategy.
 
 ## How to Play
 - Each day, review the weather forecast and local events.
