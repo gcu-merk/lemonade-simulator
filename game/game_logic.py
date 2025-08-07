@@ -374,10 +374,27 @@ class GameSimulator:
         )
     
     def ai_make_decision(self, info_budget_ratio: float = 0.15) -> Tuple[str, str, float, int, List[str]]:
-        """AI selects the optimal affordable decision maximizing expected profit (auto-buy all info)."""
+        """
+        AI selects the optimal affordable decision maximizing expected profit (auto-buy all info).
+        
+        Layman's explanation:
+        The AI tries every possible combination of location, recipe, price, and quantity it can afford, always buying all available information. For each option, it estimates how much profit it would make. It then picks the option with the highest expected profit. If it can't afford anything, it buys one cup of the cheapest recipe at the first location as a fallback.
+        """
         self.initialize_ai()
         ai_state = self.player_manager.get_player_state('ai')
         info_purchased = list(INFO_MARKET.keys())
+        # Step-by-step layman's explanation
+        print(f"\n{'='*60}")
+        print("AI DECISION-MAKING PROCESS (Step by Step):")
+        print("1. The AI looks at all possible locations, recipes, prices, and quantities it could choose.")
+        print("2. It always buys all available information to make the best decision.")
+        print(f"3. It checks the weather forecast: {self.engine.weather_forecast}.")
+        print("4. For each possible choice, it estimates how much profit it could make, considering its money, reputation, and the cost of each option.")
+        print("5. It removes any options it can't afford.")
+        print("6. Out of the affordable options, it picks the one with the highest expected profit.")
+        print("7. If it can't afford anything, it just buys one cup of the cheapest recipe at the first location as a fallback.")
+        print("Let's see what the AI does this turn...\n")
+
         # Generate all possible decisions and filter for affordability
         possible_decisions = self.meu_analyzer.generate_all_decisions(
             list(LOCATIONS.keys()),
@@ -385,17 +402,43 @@ class GameSimulator:
             ai_state,
             info_purchased
         )
-        # Filter only affordable decisions
+        print(f"AI considered {len(possible_decisions)} possible choices.")
         affordable_decisions = [d for d in possible_decisions if self.player_manager.can_afford('ai', d.recipe, d.quantity, info_purchased)]
+        print(f"AI can afford {len(affordable_decisions)} of those choices.")
+
+        # Print the MEU equation
+        print("\nMEU (Maximum Expected Utility) Equation:")
+        print("MEU = Σ [P(outcome) × Utility(outcome)] for all possible outcomes")
+        print("In this game, Utility is the expected profit for each decision, and P(outcome) is the probability of each scenario (weather, sales, etc).\n")
+
+        # Sort affordable decisions by expected_profit (MEU), descending
+        top_decisions = sorted(affordable_decisions, key=lambda d: getattr(d, 'expected_profit', 0), reverse=True)[:5]
+        print("Top 5 AI Decisions by MEU:")
+        for idx, d in enumerate(top_decisions, 1):
+            # Print actual data for each decision
+            loc = getattr(d, 'location', '?')
+            rec = getattr(d, 'recipe', '?')
+            price = getattr(d, 'price', 0)
+            qty = getattr(d, 'quantity', 0)
+            exp_profit = getattr(d, 'expected_profit', 0)
+            reasoning = getattr(d, 'reasoning', None)
+            print(f"{idx}. Location: {loc.title()}, Recipe: {rec.title()}, Price: ${price:.2f}, Quantity: {qty}, MEU: {exp_profit:.3f}")
+            if reasoning:
+                print(f"   Reasoning: {reasoning}")
+        print("")
+
         if affordable_decisions:
-            # Pick the one with the highest expected profit
-            best_decision = max(affordable_decisions, key=lambda d: getattr(d, 'expected_profit', 0))
+            best_decision = top_decisions[0]
             location = best_decision.location
             recipe = best_decision.recipe
             price = getattr(best_decision, 'price', 1.0)
             quantity = getattr(best_decision, 'quantity', 1)
+            ai_reasoning = getattr(best_decision, 'reasoning', None)
+            print(f"AI picks: {location.title()} / {recipe.title()} / ${price:.2f} per cup / {quantity} cups.")
+            print(f"\nWhy this decision?\nThe AI chose this option because it has the highest MEU (expected profit) out of all affordable choices. This means, based on all available information, this decision is most likely to give the best result.")
+            if ai_reasoning:
+                print(f"\nAI's detailed reasoning: {ai_reasoning}")
         else:
-            # Fallback: buy 1 cup of cheapest recipe
             cheapest_recipe = min(RECIPES.keys(), key=lambda r: RECIPES[r]['cost'])
             location = list(LOCATIONS.keys())[0]
             recipe = cheapest_recipe
@@ -403,12 +446,16 @@ class GameSimulator:
             quantity = 1
             info_purchased = []
             best_decision = None
+            ai_reasoning = "AI could not afford any optimal decision, so it chose the cheapest fallback option."
+            print("AI could not afford any optimal decision, so it chose the cheapest fallback option.")
+        print(f"{'='*60}\n")
         ai_state.decision_logs.append({
             'day': self.day,
             'decision': best_decision,
             'info_purchased': info_purchased,
-            'reasoning': getattr(best_decision, 'reasoning', None) if best_decision else None
+            'reasoning': ai_reasoning
         })
+        # Only print the step-by-step and MEU/decision summary (no duplicate explanation)
         return (
             location,
             recipe,
@@ -524,7 +571,7 @@ class GameInterface:
                 print(f"  Total Sales: {player_data['total_sales']} glasses")
     
     def display_daily_results(self):
-        """Display results for the current day, showing human first, then AI."""
+        """Display results for the current day, showing human, AI, and optimal actuals."""
         print(f"\n{'='*60}")
         print(f"DAY {self.sim.day} RESULTS")
         print(f"{'='*60}")
@@ -563,6 +610,61 @@ class GameInterface:
                   f"({log['reputation_change']:+.1f})")
             if log.get('info_purchased'):
                 print(f"  Info Purchased: {', '.join(log['info_purchased'])}")
+
+        # --- OPTIMAL ACTUALS SECTION ---
+        # Brute-force all possible decisions using actual weather and game state, and print the best possible outcome
+        print(f"\nOPTIMAL:")
+        # Use the AI's MEUAnalyzer to generate all possible decisions, but with actual weather and current player state
+        from game.meu_analyzer import MEUAnalyzer
+        analyzer = MEUAnalyzer(self.sim)
+        # Use AI's state for money/reputation, but use actual weather
+        ai_state = self.sim.player_manager.get_player_state('ai')
+        info_purchased = list(INFO_MARKET.keys())
+        ai_money = ai_state.money
+        possible_decisions = analyzer.generate_all_decisions(
+            list(LOCATIONS.keys()),
+            self.sim.engine.current_weather,  # Use actual weather
+            ai_state,
+            info_purchased
+        )
+        # Simulate each decision with actual weather and current state, but only if affordable with AI's money
+        best_result = None
+        best_decision = None
+        for d in possible_decisions:
+            location = d.location
+            recipe = d.recipe
+            price = getattr(d, 'price', 1.0)
+            quantity = getattr(d, 'quantity', 1)
+            # Calculate total cost (recipe + info)
+            recipe_cost = RECIPES[recipe]['cost'] * quantity
+            info_cost = sum(INFO_MARKET[info]['cost'] for info in info_purchased)
+            total_cost = recipe_cost + info_cost
+            if total_cost > ai_money:
+                continue
+            # Defensive: check affordability (should match above)
+            if not self.sim.player_manager.can_afford('ai', recipe, quantity, info_purchased):
+                continue
+            # Simulate with actual weather
+            result = self.sim.simulate_day('ai', location, recipe, price, quantity, info_purchased)
+            if (best_result is None) or (result.profit > best_result.profit):
+                best_result = result
+                best_decision = d
+        if best_result and best_decision:
+            print(f"  Location: {best_decision.location.title()}")
+            print(f"  Recipe: {best_decision.recipe.title()}")
+            print(f"  Price: ${getattr(best_decision, 'price', 1.0):.2f}")
+            print(f"  Made: {getattr(best_decision, 'quantity', 1)} glasses")
+            print(f"  Sold: {best_result.cups_sold} glasses")
+            print(f"  Waste: {best_result.waste} glasses")
+            print(f"  Revenue: ${best_result.revenue:.2f}")
+            print(f"  Profit: ${best_result.profit:+.2f}")
+            print(f"  Quality: {best_result.quality:.1f}/10")
+            print(f"  Customer Contacts: {best_result.customers}")
+            print(f"  Reputation: {ai_state.reputation:.1f}/10 ({best_result.reputation_change:+.1f})")
+            if info_purchased:
+                print(f"  Info Purchased: {', '.join(info_purchased)}")
+        else:
+            print("  No optimal decision found (possibly due to affordability constraints).")
     
     def get_human_decision(self) -> Tuple[str, str, float, int, List[str]]:
         """Get decision input from human player (auto-buy all info before any prompts)"""
